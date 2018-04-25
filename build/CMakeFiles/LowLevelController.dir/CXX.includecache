@@ -31,6 +31,8 @@ iostream
 -
 fstream
 -
+nlopt.hpp
+-
 MyWindow.hpp
 /home/panda/myfolder/wholebodycontrol/12-3DLowLevelControl/MyWindow.hpp
 

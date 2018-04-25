@@ -42,7 +42,7 @@ MyWindow::MyWindow(Controller* _controller)
 
   // Set the initial target positon to the initial position of the end effector
   // mTargetPosition = mController->getEndEffector("right")->getTransform().translation();
-  mTargetPosition << -0.5, 0.8, -0.6;
+  mTargetPosition << 0.4, 0.0, 0.6;
 }
 
 //====================================================================
@@ -75,9 +75,16 @@ void MyWindow::timeStepping() {
 void MyWindow::drawWorld() const {
   // Draw the target position
   if (mRI) {
+    Eigen::Matrix<double, 4, 4> baseTf = mController->mRobot->getBodyNode(0)->getTransform().matrix();
+    double psi =  atan2(baseTf(0,0), -baseTf(1,0));
+    Eigen::Transform<double, 3, Eigen::Affine> Tf0 = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
+    Tf0.rotate(Eigen::AngleAxisd(psi, Eigen::Vector3d::UnitZ()));
+
     mRI->setPenColor(Eigen::Vector3d(0.8, 0.2, 0.2));
     mRI->pushMatrix();
-    mRI->translate(mTargetPosition);
+    mRI->translate( \
+      (mController->mRobot->getPositions()).segment(3,3) \
+      + Tf0.matrix().block<3, 3>(0, 0)*mTargetPosition);
     mRI->drawEllipsoid(Eigen::Vector3d(0.05, 0.05, 0.05));
     mRI->popMatrix();    
 
