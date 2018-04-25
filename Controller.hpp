@@ -59,7 +59,7 @@ public:
   /// \brief Keyboard control
   virtual void keyboard(unsigned char _key, int _x, int _y);
 
-private:
+//private:
   /// \brief Robot
   dart::dynamics::SkeletonPtr mRobot;
 
@@ -69,14 +69,23 @@ private:
   /// \brief Right End-effector of the robot
   dart::dynamics::BodyNode* mRightEndEffector;
 
+  dart::dynamics::BodyNode* mLWheel;
+  dart::dynamics::BodyNode* mRWheel;
+
   /// \brief Control forces
-  Eigen::VectorXd mForces;
+  Eigen::Matrix<double, 19, 1> mForces;
 
   /// \brief Proportional gain for the virtual spring forces at the end effector
   Eigen::Matrix3d mKp;
 
   /// \brief Derivative gain for the virtual spring forces at the end effector
   Eigen::Matrix3d mKv;
+
+  size_t mSteps;
+
+  Eigen::Matrix<double, 30, 1> ddq_lambda;
+
+  double zCOMInit;
 };
 
 #endif  // EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_
