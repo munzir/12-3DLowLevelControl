@@ -42,7 +42,7 @@ MyWindow::MyWindow(Controller* _controller)
 
   // Set the initial target positon to the initial position of the end effector
   // mTargetPosition = mController->getEndEffector("right")->getTransform().translation();
-  mTargetPosition << 0.4, 0.0, 0.6;
+  mTargetPosition << 0.4, 0.0, 0.8;
 }
 
 //====================================================================

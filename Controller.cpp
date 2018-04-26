@@ -78,6 +78,7 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot,
     _robot->getJoint(i)->setDampingCoefficient(0, 0.5);
   std::cout << "Damping coefficients set" << std::endl;
 
+  dqFilt = new filter(25, 100);
 }
 
 //=========================================================================
@@ -150,16 +151,19 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   const int dof = (const int)mRobot->getNumDofs();
   const int nConstraints = 5;
   Eigen::VectorXd q = mRobot->getPositions();
-  Eigen::VectorXd dq    = mRobot->getVelocities();                // n x 1
+  Eigen::VectorXd dqUnFilt    = mRobot->getVelocities();                // n x 1
+  dqFilt->AddSample(dqUnFilt);
+  Eigen::VectorXd dq = dqFilt->average;
   double wEER = 0.01, wEEL = 0.01, wSpeedReg = 0.0, wReg = 0.0, wPose = 0.0;
-  Eigen::DiagonalMatrix<double, 3> wBal(10.0, 0.0, 1.0);
-  double KpxCOM = 100.0, KvxCOM = 75.0;
+  Eigen::DiagonalMatrix<double, 3> wBal(1.0, 0.0, 1.0);
+  double KpxCOM = 750.0, KvxCOM = 250.0;
   double KvSpeedReg = 0.01; // Speed Reg
   double KpPose = 10.0, KvPose = 0.0;
   Eigen::Matrix<double, 4, 4> baseTf = mRobot->getBodyNode(0)->getTransform().matrix();
   Eigen::Vector3d xyz0 = q.segment(3,3); // position of frame 0 in the world frame represented in the world frame
   Eigen::Vector3d dxyz0 = baseTf.matrix().block<3,3>(0,0)*dq.segment(3,3); // velocity of frame 0 in the world frame represented in the world frame
-  
+
+
   // increase the step counter
   mSteps++;
   //cout << mSteps << endl;
