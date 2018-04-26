@@ -136,7 +136,7 @@ dart::dynamics::SkeletonPtr createKrang() {
   baseTf.prerotate(Eigen::AngleAxisd(-qBaseInit,Eigen::Vector3d::UnitX())).prerotate(Eigen::AngleAxisd(-M_PI/2+headingInit,Eigen::Vector3d::UnitY())).prerotate(Eigen::AngleAxisd(M_PI/2, Eigen::Vector3d::UnitX()));
   Eigen::AngleAxisd aa(baseTf.matrix().block<3,3>(0,0));
 
-  // Initializing the configuration
+  // Ensure CoM is right on top of wheel axis
   const int dof = (const int)krang->getNumDofs();
   comOptParams optParams;
   optParams.robot = krang;
@@ -153,6 +153,7 @@ dart::dynamics::SkeletonPtr createKrang() {
   opt.optimize(q_vec, minf);
   Eigen::Matrix<double, 25, 1> q(q_vec.data());
   
+  // Initializing the configuration
   krang->setPositions(q); 
 
   return krang;
@@ -200,7 +201,7 @@ int main(int argc, char* argv[])
   // create and initialize the world
   //Eigen::Vector3d gravity(0.0,  -9.81, 0.0);
   //world->setGravity(gravity);
-  world->setTimeStep(1.0/1000);
+  world->setTimeStep(1.0/5000);
 
   // create a window and link it to the world
   MyWindow window(new Controller(robot, robot->getBodyNode("lGripper"), robot->getBodyNode("rGripper") ) );
