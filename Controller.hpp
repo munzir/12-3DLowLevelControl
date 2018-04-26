@@ -86,6 +86,8 @@ public:
   Eigen::Matrix<double, 30, 1> ddq_lambda;
 
   double zCOMInit;
+
+  Eigen::Matrix<double, 25, 1> qInit;
 };
 
 #endif  // EXAMPLES_OPERATIONALSPACECONTROL_CONTROLLER_HPP_

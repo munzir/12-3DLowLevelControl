@@ -62,20 +62,21 @@ Controller::Controller(dart::dynamics::SkeletonPtr _robot,
   mLWheel = mRobot->getBodyNode("LWheel");
   mRWheel = mRobot->getBodyNode("RWheel");
   
+  qInit = mRobot->getPositions();
+
   Eigen::Vector3d bodyCOM = ( \
     mRobot->getMass()*mRobot->getCOM() - mLWheel->getMass()*mLWheel->getCOM() - mRWheel->getMass()*mLWheel->getCOM()) \
     /(mRobot->getMass() - mLWheel->getMass() - mRWheel->getMass());
-  zCOMInit = bodyCOM(2) - mRobot->getPosition(5);
+  zCOMInit = bodyCOM(2) - qInit(5);
   // Remove position limits
-  /*
-  for (int i = 6; i < dof; ++i)
+  for(int i = 6; i < dof-1; ++i)
     _robot->getJoint(i)->setPositionLimitEnforced(false);
-  std::cout << "Position Limit Enforced set to false" << std::endl*/
+  std::cout << "Position Limit Enforced set to false" << std::endl;
 
   // Set joint damping
-  /*for (int i = 6; i < dof; ++i)
+  for(int i = 6; i < dof-1; ++i)
     _robot->getJoint(i)->setDampingCoefficient(0, 0.5);
-  std::cout << "Damping coefficients set" << std::endl*/
+  std::cout << "Damping coefficients set" << std::endl;
 
 }
 
@@ -150,15 +151,18 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   const int nConstraints = 5;
   Eigen::VectorXd q = mRobot->getPositions();
   Eigen::VectorXd dq    = mRobot->getVelocities();                // n x 1
-  double wEER = 1.0, wEEL = 1.0, wSpeedReg = 100.0, wReg = 1.0, wBal = 100.0;
-  double KpxCOM = 750.0, KvxCOM = 250.0;
+  double wEER = 0.01, wEEL = 0.01, wSpeedReg = 0.0, wReg = 0.0, wPose = 0.0;
+  Eigen::DiagonalMatrix<double, 3> wBal(10.0, 0.0, 1.0);
+  double KpxCOM = 100.0, KvxCOM = 75.0;
+  double KvSpeedReg = 0.01; // Speed Reg
+  double KpPose = 10.0, KvPose = 0.0;
   Eigen::Matrix<double, 4, 4> baseTf = mRobot->getBodyNode(0)->getTransform().matrix();
   Eigen::Vector3d xyz0 = q.segment(3,3); // position of frame 0 in the world frame represented in the world frame
   Eigen::Vector3d dxyz0 = baseTf.matrix().block<3,3>(0,0)*dq.segment(3,3); // velocity of frame 0 in the world frame represented in the world frame
   
   // increase the step counter
   mSteps++;
-  cout << mSteps << endl;
+  //cout << mSteps << endl;
 
   // Rotation Transform of Frame 0
   double psi =  atan2(baseTf(0,0), -baseTf(1,0));
@@ -199,14 +203,14 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   // Jacobian
   math::LinearJacobian JEEL_small = mLeftEndEffector->getLinearJacobian(); 
   Eigen::Matrix<double, 3, 25> JEEL_world;
-  JEEL_world << zero7Col, zeroCol, JEEL_small.block<3,2>(0,6), zeroCol, JEEL_small.block<3,7>(0,8), zero7Col;
+  JEEL_world << JEEL_small.block<3,1>(0,0), zero7Col, JEEL_small.block<3,2>(0,6), zeroCol, JEEL_small.block<3,7>(0,8), zero7Col;
   Eigen::Matrix<double, 3, 25> JEEL;
   JEEL = Rot0*JEEL_world;
   
   // Jacobian Derivative
   math::LinearJacobian dJEEL_small = mLeftEndEffector->getLinearJacobianDeriv(); 
   Eigen::Matrix<double, 3, 25> dJEEL_world;
-  dJEEL_world << zero7Col, zeroCol, dJEEL_small.block<3,2>(0,6), zeroCol, dJEEL_small.block<3,7>(0,8), zero7Col;
+  dJEEL_world << dJEEL_small.block<3,1>(0,0), zero7Col, dJEEL_small.block<3,2>(0,6), zeroCol, dJEEL_small.block<3,7>(0,8), zero7Col;
   Eigen::Matrix<double, 3, 25> dJEEL;
   dJEEL = dRot0*JEEL_world + Rot0*dJEEL_world;
 
@@ -224,14 +228,14 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   // Jacobian
   math::LinearJacobian JEER_small = mRightEndEffector->getLinearJacobian(); 
   Eigen::Matrix<double, 3, 25> JEER_world;
-  JEER_world << zero7Col, zeroCol, JEER_small.block<3,2>(0,6), zeroCol, zero7Col, JEER_small.block<3,7>(0,8);
+  JEER_world << JEER_small.block<3,1>(0,0), zero7Col, JEER_small.block<3,2>(0,6), zeroCol, zero7Col, JEER_small.block<3,7>(0,8);
   Eigen::Matrix<double, 3, 25> JEER;
   JEER = Rot0*JEER_world;
   
   // Jacobian Derivative
   math::LinearJacobian dJEER_small = mRightEndEffector->getLinearJacobianDeriv(); 
   Eigen::Matrix<double, 3, 25> dJEER_world;
-  dJEER_world << zero7Col, zeroCol, dJEER_small.block<3,2>(0,6), zeroCol, zero7Col, dJEER_small.block<3,7>(0,8);
+  dJEER_world << dJEER_small.block<3,1>(0,0), zero7Col, dJEER_small.block<3,2>(0,6), zeroCol, zero7Col, dJEER_small.block<3,7>(0,8);
   Eigen::Matrix<double, 3, 25> dJEER;
   dJEER = dRot0*JEER_world + Rot0*dJEER_world;
 
@@ -262,7 +266,7 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   // Jacobian
   Eigen::MatrixXd JCOM_full = mRobot->getCOMLinearJacobian(); 
   Eigen::Matrix<double, 3, 25> JCOM_body;
-  JCOM_body << JCOM_full.block<3,1>(0,0), zeroCol, zeroCol, zeroCol, zeroCol, zeroCol, JCOM_full.block<3,19>(0,6);
+  JCOM_body << JCOM_full.block<3,1>(0,0), zero7Col, JCOM_full.block<3,17>(0,8);
   Eigen::MatrixXd JCOM;
   JCOM = (mRobot->getMass()/(mRobot->getMass() - mLWheel->getMass() - mRWheel->getMass()))*Rot0*JCOM_body;
   //Eigen::VectorXd JxCOM;
@@ -271,7 +275,7 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   // Jacobian Derivative
   Eigen::MatrixXd dJCOM_full = mRobot->getCOMLinearJacobianDeriv(); 
   Eigen::Matrix<double, 3, 25> dJCOM_body;
-  dJCOM_body << dJCOM_full.block<3,1>(0,0), zeroCol, zeroCol, zeroCol, zeroCol, zeroCol, dJCOM_full.block<3,19>(0,6);
+  dJCOM_body << dJCOM_full.block<3,1>(0,0), zero7Col, dJCOM_full.block<3,17>(0,8);
   Eigen::MatrixXd dJCOM;
   dJCOM = (mRobot->getMass()/(mRobot->getMass() - mLWheel->getMass() - mRWheel->getMass()))*(dRot0*JCOM_body + Rot0*dJCOM_body);
   //Eigen::VectorXd dJxCOM;
@@ -284,31 +288,58 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   Eigen::Matrix<double, 3, 1> bBal;
   Eigen::Matrix<double, 3, 1> ddXCOMref;
   ddXCOMref << ddxCOMref, 0.0, ddzCOMref;
-  bBal << (-wBal*(dJCOM*dq - ddXCOMref));
+  bBal << (wBal*(-dJCOM*dq + ddXCOMref));
   
+  // ***************************** Pose
+  Eigen::MatrixXd wMatPose = Eigen::MatrixXd::Identity(30, 30);
+  wMatPose(0,0) = 10*wPose; // Base Link Pitch
+  for(int i=1; i<8; i++) wMatPose(i, i) = 0; // Base Link other speeds + wheels
+  for(int i=8; i<10; i++) wMatPose(i, i) = wPose; // Waist + Torso
+  for(int i=10; i<25; i++) wMatPose(i, i) = wPose/1.0; // Other Upper Body Joints
+  for(int i=25; i<30; i++) wMatPose(i, i) = 0.0; // Lambdas
+  Eigen::MatrixXd PPose;
+  PPose = wMatPose;
+  Eigen::Matrix<double, 30, 1> bPose; 
+  bPose << (-KpPose*(q - qInit) - KvPose*dq), 0, 0, 0, 0, 0;
+  bPose = wMatPose*bPose;
+  
+  
+  // ***************************** Speed Regulator
+  Eigen::MatrixXd wMatSpeedReg = Eigen::MatrixXd::Identity(30, 30);
+  wMatSpeedReg(0,0) = 10*wSpeedReg; // Base Link Pitch
+  for(int i=1; i<8; i++) wMatSpeedReg(i, i) = 0; // Base Link other speeds + wheels
+  for(int i=8; i<10; i++) wMatSpeedReg(i, i) = wSpeedReg; // Waist + Torso
+  for(int i=10; i<25; i++) wMatSpeedReg(i, i) = wSpeedReg/1.0; // Other Upper Body Joints
+  for(int i=25; i<30; i++) wMatSpeedReg(i, i) = 0.0; // Lambdas
+  Eigen::MatrixXd PSpeedReg;
+  PSpeedReg = wMatSpeedReg;
+  Eigen::Matrix<double, 30, 1> bSpeedReg; 
+  bSpeedReg << -KvSpeedReg*dq, 0, 0, 0, 0, 0;
+  bSpeedReg = wMatSpeedReg*bSpeedReg;
   
   // ***************************** Regulator
-  Eigen::MatrixXd PSpeedReg = wSpeedReg*Eigen::MatrixXd::Identity(30, 30);
-  for(int i=1; i<6; i++) PSpeedReg(i, i) = 0;
-  for(int i=25; i<30; i++) PSpeedReg(i, i) = 0;
-  Eigen::Matrix<double, 30, 1> bSpeedReg; 
-  bSpeedReg << -wSpeedReg*10*dq, 0, 0, 0, 0, 0;
-  
-  Eigen::MatrixXd PReg = wReg*Eigen::MatrixXd::Identity(30, 30);
+  Eigen::MatrixXd wMatReg = Eigen::MatrixXd::Identity(30, 30);
+  wMatReg(0,0) = 0; // Base Link Pitch
+  for(int i=1; i<8; i++) wMatReg(i, i) = 0; // Base Link other speeds + wheels
+  for(int i=8; i<10; i++) wMatReg(i, i) = wReg; // Waist + Torso
+  for(int i=10; i<25; i++) wMatReg(i, i) = 10*wReg; // Other Upper Body Joints
+  for(int i=25; i<30; i++) wMatReg(i, i) = 0.0; // Lambdas
+  Eigen::MatrixXd PReg;
+  PReg = wMatReg;
   Eigen::Matrix<double, 30, 1> bReg = Eigen::VectorXd::Zero(30); 
 
   // **************************** Constraint Jacobian
   // Constraints:
-  //  1. dZ0 = 0                                               
-  //     => dq_orig(4)*cos(qBody1) + dq_orig(5)*sin(qBody1) = 0
-  //  2. da3 + R/L*(dthL - dthR) = 0                           
-  //     => dq_orig(1)*cos(qBody1) + dq_orig(2)*sin(qBody1) + R/L*(dq_orig(6) - dq_orig(7)) = 0 
-  //  3. da1*cos(psii) + da2*sin(psii) = 0                     
-  //     => dq_orig(1)*sin(qBody1) - dq_orig(2)*cos(qBody1) = 0
-  //  4. dX0*sin(psii) - dY0*cos(psii) = 0                     
-  //     => dq_orig(3) = 0
-  //  5. dX0*cos(psii) + dY0*sin(psii) - R/2*(dthL + dthR) = 0 
-  //     => dq_orig(4)*sin(qBody1) - dq_orig(5)*cos(qBody1) - R/2*(dq_orig(6) + dq_orig(7) - 2*dq_orig(0)) = 0
+  //  0. dZ0 = 0                                               
+  //                                                              => dq_orig(4)*cos(qBody1) + dq_orig(5)*sin(qBody1) = 0
+  //  1. da3 + R/L*(dthL - dthR) = 0                           
+  //                                                              => dq_orig(1)*cos(qBody1) + dq_orig(2)*sin(qBody1) + R/L*(dq_orig(6) - dq_orig(7)) = 0 
+  //  2. da1*cos(psii) + da2*sin(psii) = 0                     
+  //                                                              => dq_orig(1)*sin(qBody1) - dq_orig(2)*cos(qBody1) = 0
+  //  3. dX0*sin(psii) - dY0*cos(psii) = 0                     
+  //                                                              => dq_orig(3) = 0
+  //  4. dX0*cos(psii) + dY0*sin(psii) - R/2*(dthL + dthR) = 0 
+  //                                                              => dq_orig(4)*sin(qBody1) - dq_orig(5)*cos(qBody1) - R/2*(dq_orig(6) + dq_orig(7) - 2*dq_orig(0)) = 0
   double R = 0.265, L = 0.68;
   double qBody1; 
   qBody1 = atan2(baseTf(0,1)*cos(psi) + baseTf(1,1)*sin(psi), baseTf(2,1));
@@ -329,23 +360,29 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   if(mSteps == 1) {
     cout << "PEER: " << PEER.rows() << " x " << PEER.cols() << endl;
     cout << "PEEL: " << PEEL.rows() << " x " << PEEL.cols() << endl;
-    cout << "PReg: " << PReg.rows() << " x " << PReg.cols() << endl;
     cout << "PBal: " << PBal.rows() << " x " << PBal.cols() << endl;
+    cout << "PPose: " << PPose.rows() << " x " << PPose.cols() << endl;
+    cout << "PSpeedReg: " << PSpeedReg.rows() << " x " << PSpeedReg.cols() << endl;
+    cout << "PReg: " << PReg.rows() << " x " << PReg.cols() << endl;
     cout << "bEER: " << bEER.rows() << " x " << bEER.cols() << endl;
     cout << "bEEL: " << bEEL.rows() << " x " << bEEL.cols() << endl;
-    cout << "bReg: " << bReg.rows() << " x " << bReg.cols() << endl;
     cout << "bBal: " << bBal.rows() << " x " << bBal.cols() << endl;
+    cout << "bPose: " << bPose.rows() << " x " << bPose.cols() << endl;
+    cout << "bSpeedReg: " << bSpeedReg.rows() << " x " << bSpeedReg.cols() << endl;
+    cout << "bReg: " << bReg.rows() << " x " << bReg.cols() << endl;
   }
-  Eigen::MatrixXd P(PEER.rows() + PEEL.rows() + PBal.rows() + PSpeedReg.rows() + PReg.rows(), PEER.cols() );
+  Eigen::MatrixXd P(PEER.rows() + PEEL.rows() + PBal.rows() + PPose.rows() + PSpeedReg.rows() + PReg.rows(), PEER.cols() );
   P << PEER,
        PEEL,
        PBal,
+       PPose,
        PSpeedReg,
        PReg;
-  Eigen::VectorXd b(bEER.rows() + bEEL.rows() + bBal.rows() + bSpeedReg.rows() + bReg.rows(), bEER.cols() );
+  Eigen::VectorXd b(bEER.rows() + bEEL.rows() + bBal.rows() + bPose.rows() + bSpeedReg.rows() + bReg.rows(), bEER.cols() );
   b << bEER,
        bEEL,
        bBal,
+       bPose,
        bSpeedReg,
        bReg;
   optParams.P = P;
@@ -365,15 +402,18 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
   const vector<double> lb(30, -10);
   const vector<double> ub(30, 10);
 
-  nlopt::opt opt(nlopt::LN_COBYLA, 30);
+  //nlopt::opt opt(nlopt::LN_COBYLA, 30);
+  nlopt::opt opt(nlopt::LD_SLSQP, 30);
   double minf;
   opt.set_min_objective(optFunc, &optParams);
-  opt.add_inequality_mconstraint(constraintFunc, &constraintParams[0], constraintTol);
-  opt.add_inequality_mconstraint(constraintFunc, &constraintParams[1], constraintTol);
+  //opt.add_inequality_mconstraint(constraintFunc, &constraintParams[0], constraintTol);
+  //opt.add_inequality_mconstraint(constraintFunc, &constraintParams[1], constraintTol);
+  opt.add_equality_mconstraint(constraintFunc, &constraintParams[1], constraintTol);
   //opt.set_lower_bounds(lb);
   //opt.set_upper_bounds(ub);
   opt.set_xtol_rel(1e-3);
-  //opt.set_maxtime(0.05);
+  int maxtimeSet = 0;
+  //opt.set_maxtime(0.01); int maxtimeSet = 1;
   vector<double> ddq_lambda_vec(30);
   Eigen::VectorXd::Map(&ddq_lambda_vec[0], ddq_lambda.size()) = ddq_lambda;
   opt.optimize(ddq_lambda_vec, minf);
@@ -385,10 +425,39 @@ void Controller::update(const Eigen::Vector3d& _targetPosition) {
 
   // Torques
   mForces << (M.block<19, 25>(6,0)*ddq_lambda.head(25) + h.tail(19) - (J.block<5, 19>(0,6).transpose())*ddq_lambda.tail(5));
-  if(mSteps < 0) {
+  if(mSteps%(maxtimeSet==1?30:30) == 0) {
     cout << "mForces: " << mForces(0);
-    for(int i=1; i<19; i++) cout << ", " << mForces(i);
+    for(int i=1; i<3; i++){ 
+      cout << ", " << mForces(i); 
+    }
     cout << endl;
+    // print wheel rows of M
+    cout << "M6: "; for(int i=0; i<25; i++) { cout << M(6, i) << ", "; } cout << endl;
+    cout << "M7: "; for(int i=0; i<25; i++) { cout << M(7, i) << ", "; } cout << endl;
+    // print ddq
+    cout << "ddq: "; for(int i=0; i<25; i++) { cout << ddq_lambda(i) << ", "; } cout << endl;
+    // print M*ddq for wheel rows
+    cout << "M6*ddq: "<< (M.block<1,25>(6,0)*ddq_lambda.head(25)) << endl;
+    cout << "M7*ddq: "<< (M.block<1,25>(7,0)*ddq_lambda.head(25)) << endl;
+    // print h for wheel rows
+    cout << "h6: " << h(6) << endl;
+    cout << "h7: " << h(7) << endl;
+    // print wheel rows of J'
+    cout << "J6: "; for(int i=0; i<5; i++) { cout << J(i, 6) << ", "; } cout << endl;
+    cout << "J7: "; for(int i=0; i<5; i++) { cout << J(i, 7) << ", "; } cout << endl;
+    // print lambdas
+    cout << "lambda: "; for(int i=0; i<5; i++) { cout << ddq_lambda(25+i) << ", "; } cout << endl;
+    // print J'*lambda for wheel rows
+    cout << "J6*lambda: " << (J.block<5,1>(0,6).transpose()*ddq_lambda.tail(5)) << endl;
+    cout << "J7*lambda: " << (J.block<5,1>(0,7).transpose()*ddq_lambda.tail(5)) << endl;
+    // Print the objective function components 
+    cout << "EEL loss: " << pow((PEEL*ddq_lambda-bEEL).norm(), 2) << endl;
+    cout << "EER loss: " << pow((PEER*ddq_lambda-bEER).norm(), 2) << endl;
+    cout << "Bal loss: " << pow((PBal*ddq_lambda-bBal).norm(), 2) << endl;
+    cout << "Pose loss: " << pow((PPose*ddq_lambda-bPose).norm(), 2) << endl;
+    cout << "Speed Reg loss: " << pow((PSpeedReg*ddq_lambda-bSpeedReg).norm(), 2) << endl;
+    cout << "Reg loss: " << pow((PReg*ddq_lambda-bReg).norm(), 2) << endl;
+    cout << "Equality: "; for(int i=0; i<6; i++) {cout << (P_*ddq_lambda-b_)(i) << ", ";} cout << endl << endl << endl;
   }
   const vector<size_t > index{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
   mRobot->setForces(index, mForces);
