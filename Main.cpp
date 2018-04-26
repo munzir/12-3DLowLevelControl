@@ -201,7 +201,7 @@ int main(int argc, char* argv[])
   // create and initialize the world
   //Eigen::Vector3d gravity(0.0,  -9.81, 0.0);
   //world->setGravity(gravity);
-  world->setTimeStep(1.0/5000);
+  world->setTimeStep(1.0/1000);
 
   // create a window and link it to the world
   MyWindow window(new Controller(robot, robot->getBodyNode("lGripper"), robot->getBodyNode("rGripper") ) );
